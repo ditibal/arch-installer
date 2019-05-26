@@ -1,0 +1,47 @@
+#!/bin/bash
+
+curl -o /etc/pacman.d/mirrorlist -s 192.168.2.210:8000/mirrorlist
+
+read -p "Введите имя компьютера: " hostname
+read -p "Введите имя пользователя: " username
+
+echo 'Прописываем имя компьютера'
+echo $hostname > /etc/hostname
+
+ln -svf /usr/share/zoneinfo/Europe/Moscow /etc/localtime
+
+echo 'Добавляем русскую локаль системы'
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+echo "ru_RU.UTF-8 UTF-8" >> /etc/locale.gen
+
+echo 'Обновим текущую локаль системы'
+locale-gen
+
+echo 'Устанавливаем загрузчик'
+bootctl install
+
+echo 'Обновляем grub.cfg'
+grub-mkconfig -o /boot/grub/grub.cfg
+
+echo 'Добавляем пользователя'
+useradd -m -g users -G wheel -s /bin/bash $username
+
+echo 'Создаем root пароль'
+passwd
+
+echo 'Устанавливаем пароль пользователя'
+passwd $username
+
+echo 'Устанавливаем SUDO'
+echo '%wheel ALL=(ALL) ALL' >> /etc/sudoers
+
+echo "Куда устанавливем Arch Linux на виртуальную машину?"
+read -p "1 - Да, 0 - Нет: " vm_setting
+if [[ $vm_setting == 0 ]]; then
+  gui_install="xorg-server xorg-drivers xorg-xinit"
+elif [[ $vm_setting == 1 ]]; then
+  gui_install="xorg-server xorg-drivers xorg-xinit virtualbox-guest-utils"
+fi
+
+echo 'Ставим иксы и драйвера'
+pacman -S $gui_install

@@ -1,0 +1,131 @@
+#!/bin/bash
+
+DRIVE='/dev/sda'
+SWAP_SIZE='+1G'
+
+setfont cyr-sun16
+
+curl -o /etc/pacman.d/mirrorlist -s 192.168.2.210:8000/mirrorlist
+
+setup() {
+    echo 'Синхронизация системных часов'
+    timedatectl set-ntp true
+
+    echo 'Создание разделов'
+    (
+      echo g;
+      echo w;
+    ) | fdisk $DRIVE || exit
+
+    echo 'Создание разделов'
+    (
+      echo g;
+
+      echo n;
+      echo;
+      echo;
+      echo +512M;
+
+      echo n;
+      echo;
+      echo;
+      echo $SWAP_SIZE;
+
+      echo n;
+      echo;
+      echo;
+      echo;
+
+      echo t;
+      echo 1;
+      echo 1;
+
+      echo t;
+      echo 2;
+      echo 19;
+
+      echo t;
+      echo 3;
+      echo 20;
+
+      echo w;
+    ) | fdisk $DRIVE || exit
+
+    echo 'Форматирование дисков'
+    mkfs.fat -F32 "$DRIVE"1
+    mkswap "$DRIVE"2
+    mkfs.ext4  "$DRIVE"3
+
+    echo 'Монтирование дисков'
+    mount "$DRIVE"3 /mnt
+    mkdir /mnt/boot
+    mount "$DRIVE"1 /mnt/boot
+    swapon "$DRIVE"2
+
+    export http_proxy=http://192.168.2.210:3128
+    export https_proxy=http://192.168.2.210:3128
+
+    echo 'Установка пакетов'
+    pacstrap /mnt \
+        base \
+        base-devel \
+        linux \
+        linux-firmware \
+        dhcpcd \
+        netctl \
+        xorg-server \
+        xorg-drivers \
+        xorg-xinit \
+        xf86-video-intel \
+        awesome \
+        git \
+        sddm \
+
+        # ranger \
+        # vim \
+        # htop \
+        # docker \
+        # chromium \
+
+        efibootmgr
+
+
+    echo 'Настройка системы'
+    genfstab -U /mnt >> /mnt/etc/fstab
+
+    cp $0 /mnt/setup.sh
+
+    arch-chroot /mnt bash setup.sh chroot
+
+    # umount -R /mnt
+
+    # reboot
+}
+
+configure() {
+    echo "configure"
+    efibootmgr -d $DRIVE -p 1 -c -L "Arch Linux" -l /vmlinuz-linux -u "root=${DRIVE}3 rw initrd=/initramfs-linux.img"
+
+    curl -o /etc/pacman.d/mirrorlist -s 192.168.2.210:8000/mirrorlist
+
+    export http_proxy=http://192.168.2.210:3128
+    export https_proxy=http://192.168.2.210:3128
+
+    # cd /tmp
+    # git clone https://aur.archlinux.org/yay.git
+    # cd yay
+    # makepkg -si
+
+    systemctl enable dhcpcd@enp0s3
+    systemctl enable sddm.service
+
+    rm /setup.sh
+}
+
+
+if [ "$1" == "chroot" ]
+then
+    configure
+else
+    setup
+fi
